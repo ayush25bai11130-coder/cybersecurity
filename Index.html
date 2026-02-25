@@ -1,241 +1,126 @@
-function loadExample(url) {
-  document.getElementById('urlInput').value = url;
-  analyze();
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CyberShield — URL Security Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-function extractFeatures(url) {
-  let parsed;
-  try { parsed = new URL(url); } catch(e) { parsed = null; }
+<div class="container">
+  <header>
+    <div class="logo">🛡️</div>
+    <div class="brand">
+      <h1>CyberShield</h1>
+      <p>URL Security Analyzer</p>
+    </div>
+    <div class="badge">PROTOTYPE v0.1</div>
+  </header>
 
-  const hostname = parsed ? parsed.hostname : url;
-  const path = parsed ? parsed.pathname + parsed.search : '';
-  const fullUrl = url;
+  <section class="hero">
+    <h2>Detect Malicious<br>URLs Instantly</h2>
+    <p>Hybrid rule-based + ML analysis extracts security features and calculates risk probability in milliseconds.</p>
 
-  const features = {};
+    <div class="input-wrap">
+      <span class="input-prefix">URL://</span>
+      <input type="text" class="url-input" id="urlInput" placeholder="paste a URL to analyze..." />
+      <button class="analyze-btn" onclick="analyze()">ANALYZE</button>
+    </div>
 
-  // URL length
-  features.urlLength = fullUrl.length;
+    <div class="quick-tests">
+      <span class="qt-label">Try:</span>
+      <button class="qt-btn" onclick="loadExample('https://www.google.com')">google.com</button>
+      <button class="qt-btn" onclick="loadExample('http://paypa1-secure-login.xyz/verify?token=abc123')">phishing example</button>
+      <button class="qt-btn" onclick="loadExample('http://192.168.1.1/admin/login')">IP-based URL</button>
+      <button class="qt-btn" onclick="loadExample('https://github.com/user/repo')">github.com</button>
+    </div>
+  </section>
 
-  // Number of dots
-  features.dotCount = (hostname.match(/\./g) || []).length;
+  <div class="loading" id="loading">
+    <div class="loading-spinner"></div>
+    <p>EXTRACTING FEATURES...</p>
+  </div>
 
-  // Has HTTPS
-  features.hasHttps = parsed ? parsed.protocol === 'https:' : false;
-
-  // IP-based URL
-  features.isIpBased = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
-
-  // Has @ symbol
-  features.hasAt = fullUrl.includes('@');
-
-  // Has double slash
-  features.hasDoubleSlash = /\/\/.*\/\//.test(fullUrl);
-
-  // Suspicious TLD
-  const suspTLDs = ['xyz', 'tk', 'ml', 'ga', 'cf', 'gq', 'pw', 'top', 'click', 'download'];
-  const tld = hostname.split('.').pop().toLowerCase();
-  features.suspiciousTLD = suspTLDs.includes(tld);
-
-  // Suspicious keywords
-  const suspKeywords = ['login', 'verify', 'secure', 'update', 'account', 'bank', 'paypal', 'ebay', 'amazon', 'signin', 'password', 'confirm'];
-  features.suspiciousKeywords = suspKeywords.filter(k => fullUrl.toLowerCase().includes(k));
-
-  // Hyphen count in domain
-  features.hyphenCount = (hostname.match(/-/g) || []).length;
-
-  // Subdomain count
-  const parts = hostname.split('.');
-  features.subdomainCount = Math.max(0, parts.length - 2);
-
-  // Special chars count
-  features.specialCharCount = (fullUrl.match(/[!@#$%^&*()+=\[\]{};':"\\|,<>\?]/g) || []).length;
-
-  // URL entropy (complexity)
-  const chars = {};
-  for (const c of fullUrl) chars[c] = (chars[c] || 0) + 1;
-  const len = fullUrl.length;
-  let entropy = 0;
-  for (const k in chars) {
-    const p = chars[k] / len;
-    entropy -= p * Math.log2(p);
-  }
-  features.entropy = Math.round(entropy * 100) / 100;
-
-  return features;
-}
-
-function scoreURL(features) {
-  let score = 0;
-  const threats = [];
-
-  if (features.urlLength > 75) {
-    score += 15;
-    threats.push({ level: 'warn', icon: '📏', title: 'Long URL', desc: `URL length is ${features.urlLength} characters. Phishing URLs are often unusually long to obscure the real destination.` });
-  }
-
-  if (!features.hasHttps) {
-    score += 20;
-    threats.push({ level: 'danger', icon: '🔓', title: 'No HTTPS Encryption', desc: 'Connection is not encrypted. Legitimate services almost always use HTTPS.' });
-  }
-
-  if (features.isIpBased) {
-    score += 30;
-    threats.push({ level: 'danger', icon: '🔢', title: 'IP-Based URL', desc: 'URL uses a raw IP address instead of a domain name. This is a common phishing tactic.' });
-  }
-
-  if (features.hasAt) {
-    score += 25;
-    threats.push({ level: 'danger', icon: '⚠️', title: '@  Symbol Detected', desc: 'The @ symbol in URLs can redirect to a malicious host while displaying a legitimate-looking prefix.' });
-  }
-
-  if (features.suspiciousTLD) {
-    score += 20;
-    threats.push({ level: 'danger', icon: '🚩', title: 'Suspicious TLD', desc: 'This domain uses a top-level domain commonly associated with free/throwaway domains used in phishing.' });
-  }
-
-  if (features.suspiciousKeywords.length > 0) {
-    score += Math.min(features.suspiciousKeywords.length * 8, 25);
-    threats.push({ level: 'warn', icon: '🔑', title: 'Suspicious Keywords', desc: `Found keywords: ${features.suspiciousKeywords.join(', ')}. These terms frequently appear in credential phishing attacks.` });
-  }
-
-  if (features.hyphenCount > 2) {
-    score += 10;
-    threats.push({ level: 'warn', icon: '➖', title: 'Excessive Hyphens', desc: `${features.hyphenCount} hyphens in domain. Attackers use hyphens to create misleading domain names (e.g. paypal-secure-login.xyz).` });
-  }
-
-  if (features.subdomainCount > 2) {
-    score += 10;
-    threats.push({ level: 'warn', icon: '🌐', title: 'Deep Subdomain Chain', desc: `${features.subdomainCount} subdomains detected. This is sometimes used to make URLs look more legitimate.` });
-  }
-
-  if (features.dotCount > 4) {
-    score += 8;
-    threats.push({ level: 'warn', icon: '•••', title: 'Excessive Dots', desc: `${features.dotCount} dots in URL. High dot counts can indicate URL obfuscation attempts.` });
-  }
-
-  score = Math.min(score, 100);
-
-  // Simulate ML probability
-  const noise = (Math.random() - 0.5) * 8;
-  const mlMalProb = Math.min(100, Math.max(0, score * 0.85 + noise + (threats.length * 2)));
-  const mlSafeProb = 100 - mlMalProb;
-
-  return { score, threats, mlMalProb: Math.round(mlMalProb), mlSafeProb: Math.round(mlSafeProb) };
-}
-
-function getVerdict(score) {
-  if (score < 20) return { label: '✅ Safe', color: 'var(--safe)', tag: 'safe' };
-  if (score < 50) return { label: '⚠️ Suspicious', color: 'var(--warn)', tag: 'warn' };
-  return { label: '🚨 Malicious', color: 'var(--accent2)', tag: 'danger' };
-}
-
-function analyze() {
-  const url = document.getElementById('urlInput').value.trim();
-  if (!url) return;
-
-  const loading = document.getElementById('loading');
-  const resultCard = document.getElementById('resultCard');
-
-  resultCard.classList.remove('visible');
-  loading.classList.add('visible');
-
-  setTimeout(() => {
-    const features = extractFeatures(url);
-    const { score, threats, mlMalProb, mlSafeProb } = scoreURL(features);
-    const verdict = getVerdict(score);
-
-    loading.classList.remove('visible');
-    renderResult(url, features, score, threats, mlMalProb, mlSafeProb, verdict);
-    resultCard.classList.add('visible');
-  }, 900);
-}
-
-function renderResult(url, features, score, threats, mlMalProb, mlSafeProb, verdict) {
-  // Risk arc
-  const arc = document.getElementById('riskArc');
-  const circumference = 289;
-  const offset = circumference - (score / 100) * circumference;
-  arc.style.stroke = verdict.color;
-  arc.style.strokeDashoffset = offset;
-
-  // Risk text
-  const pctEl = document.getElementById('riskPct');
-  pctEl.textContent = score + '%';
-  pctEl.style.color = verdict.color;
-
-  document.getElementById('riskVerdict').innerHTML = `<span style="color:${verdict.color}">${verdict.label}</span>`;
-  document.getElementById('riskUrl').textContent = url.length > 65 ? url.substring(0, 62) + '...' : url;
-
-  // Tags
-  const tagsEl = document.getElementById('riskTags');
-  tagsEl.innerHTML = '';
-  const tags = [];
-  if (features.hasHttps) tags.push({ label: 'HTTPS', cls: 'tag-safe' });
-  else tags.push({ label: 'HTTP', cls: 'tag-danger' });
-  if (features.isIpBased) tags.push({ label: 'IP-BASED', cls: 'tag-danger' });
-  if (features.suspiciousTLD) tags.push({ label: 'SUSPICIOUS TLD', cls: 'tag-danger' });
-  if (features.suspiciousKeywords.length) tags.push({ label: 'PHISH KEYWORDS', cls: 'tag-warn' });
-  if (score < 20) tags.push({ label: 'CLEAN', cls: 'tag-safe' });
-  tags.forEach(t => {
-    tagsEl.innerHTML += `<span class="risk-tag ${t.cls}">${t.label}</span>`;
-  });
-
-  // Features grid
-  const grid = document.getElementById('featuresGrid');
-  const featureItems = [
-    { name: 'URL Length', val: features.urlLength + ' chars', status: features.urlLength > 75 ? 'warn' : 'safe' },
-    { name: 'HTTPS', val: features.hasHttps ? 'Yes ✓' : 'No ✗', status: features.hasHttps ? 'safe' : 'danger' },
-    { name: 'IP-Based URL', val: features.isIpBased ? 'Yes ✗' : 'No ✓', status: features.isIpBased ? 'danger' : 'safe' },
-    { name: 'Dot Count', val: features.dotCount, status: features.dotCount > 4 ? 'warn' : 'safe' },
-    { name: 'Suspicious TLD', val: features.suspiciousTLD ? 'Yes ✗' : 'No ✓', status: features.suspiciousTLD ? 'danger' : 'safe' },
-    { name: 'Keyword Hits', val: features.suspiciousKeywords.length, status: features.suspiciousKeywords.length > 0 ? 'warn' : 'safe' },
-    { name: 'Hyphens in Domain', val: features.hyphenCount, status: features.hyphenCount > 2 ? 'warn' : 'safe' },
-    { name: 'URL Entropy', val: features.entropy, status: features.entropy > 4.5 ? 'warn' : 'safe' },
-  ];
-
-  grid.innerHTML = featureItems.map(f => {
-    const icons = { safe: '✓', warn: '!', danger: '✗' };
-    const colors = { safe: 'var(--safe)', warn: 'var(--warn)', danger: 'var(--accent2)' };
-    return `
-      <div class="feature-item">
-        <div class="feature-icon fi-${f.status}" style="color:${colors[f.status]}; font-family:var(--mono); font-size:12px; font-weight:700;">${icons[f.status]}</div>
-        <div class="feature-info">
-          <div class="feature-name">${f.name}</div>
-          <div class="feature-val" style="color:${colors[f.status]}">${f.val}</div>
+  <div class="result-card" id="resultCard">
+    <div class="risk-header">
+      <div class="risk-circle">
+        <svg width="110" height="110" viewBox="0 0 110 110">
+          <circle cx="55" cy="55" r="46" fill="none" stroke="#1e3358" stroke-width="8"/>
+          <circle cx="55" cy="55" r="46" fill="none" stroke-width="8"
+            stroke-linecap="round"
+            id="riskArc"
+            stroke-dasharray="289"
+            stroke-dashoffset="289"
+            style="transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)"/>
+        </svg>
+        <div class="risk-circle-text">
+          <span class="risk-pct" id="riskPct">0%</span>
+          <span class="risk-label-sm">Risk</span>
         </div>
-      </div>`;
-  }).join('');
+      </div>
+      <div class="risk-meta">
+        <div class="risk-verdict" id="riskVerdict">—</div>
+        <div class="risk-url" id="riskUrl"></div>
+        <div class="risk-tags" id="riskTags"></div>
+      </div>
+    </div>
 
-  // ML bars
-  document.getElementById('mlMalPct').textContent = mlMalProb + '%';
-  document.getElementById('mlSafePct').textContent = mlSafeProb + '%';
-  setTimeout(() => {
-    document.getElementById('mlMalBar').style.width = mlMalProb + '%';
-    document.getElementById('mlSafeBar').style.width = mlSafeProb + '%';
-  }, 100);
+    <p class="features-title">Extracted Features</p>
+    <div class="features-grid" id="featuresGrid"></div>
 
-  // Threats
-  const threatsList = document.getElementById('threatsList');
-  const threatsTitle = document.getElementById('threatsTitle');
-  if (threats.length === 0) {
-    threatsTitle.textContent = '✅ No Threat Indicators Detected';
-    threatsList.innerHTML = '<div class="threat-item"><span class="threat-icon">🟢</span><div class="threat-text"><strong>URL appears safe</strong><p>No significant security indicators found. The URL follows standard patterns and uses secure connection.</p></div></div>';
-  } else {
-    threatsTitle.textContent = `Detected Threat Indicators (${threats.length})`;
-    threatsList.innerHTML = threats.map(t => {
-      const colors = { safe: 'var(--safe)', warn: 'var(--warn)', danger: 'var(--accent2)' };
-      return `<div class="threat-item">
-        <span class="threat-icon">${t.icon}</span>
-        <div class="threat-text">
-          <strong style="color:${colors[t.level]}">${t.title}</strong>
-          <p>${t.desc}</p>
+    <div class="ml-section">
+      <div class="ml-header">
+        <div class="ml-dot"></div>
+        <span>ML Model — Random Forest Classifier</span>
+      </div>
+      <div class="ml-bar-wrap">
+        <div class="ml-bar-label">
+          <span>Malicious Probability</span>
+          <span id="mlMalPct">—</span>
         </div>
-      </div>`;
-    }).join('');
-  }
-}
+        <div class="ml-bar-bg">
+          <div class="ml-bar-fill" id="mlMalBar" style="background: var(--accent2);"></div>
+        </div>
+      </div>
+      <div class="ml-bar-wrap">
+        <div class="ml-bar-label">
+          <span>Benign Probability</span>
+          <span id="mlSafePct">—</span>
+        </div>
+        <div class="ml-bar-bg">
+          <div class="ml-bar-fill" id="mlSafeBar" style="background: var(--safe);"></div>
+        </div>
+      </div>
+    </div>
 
-// Enter key
-document.getElementById('urlInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') analyze();
-});
+    <p class="threats-title" id="threatsTitle">Detected Threat Indicators</p>
+    <div id="threatsList"></div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <span class="stat-num">12</span>
+      <div class="stat-desc">Features Analyzed</div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">RF</span>
+      <div class="stat-desc">ML Algorithm</div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">&lt;50ms</span>
+      <div class="stat-desc">Analysis Time</div>
+    </div>
+    <div class="stat-item">
+      <span class="stat-num">2-in-1</span>
+      <div class="stat-desc">Hybrid Approach</div>
+    </div>
+  </div>
+
+  <footer>CYBERSHIELD URL ANALYZER — PROTOTYPE — FOR DEMONSTRATION PURPOSES ONLY</footer>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
